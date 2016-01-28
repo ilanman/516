@@ -37,8 +37,6 @@ def run_query(conn, chunk, table):
     except Exception as error:
         print chunk
         print error
-      #  ERROR_COUNT += 1
-      #  print "Error count: ", ERROR_COUNT
 
 
 # helper functions to insert
@@ -53,7 +51,7 @@ def insert_inproceedings_table(dict_version, title, cur):
         booktitle = dict_version.get('booktitle', None)
 
     # ON CONFLICT DO NOTHING --> don't insert row
-    cur.execute("""  INSERT INTO inproceedings (pubkey, booktitle, title, year) \
+    cur.execute("""  INSERT INTO inproceedings2 (pubkey, booktitle, title, year) \
                      VALUES ('{}', '{}', '{}', '{}') \
                      ON CONFLICT (pubkey) DO NOTHING; """.
                 format(dict_version.get('@key'),
@@ -68,7 +66,7 @@ def insert_article_table(dict_version, title, cur):
     truncate titles to under 500 characters
     """
 
-    cur.execute("""  INSERT INTO article (pubkey, title, journal, year)
+    cur.execute("""  INSERT INTO article2 (pubkey, title, journal, year)
                      VALUES ('{}', '{}', '{}', '{}') \
                      ON CONFLICT (pubkey) DO NOTHING; """.
                 format(dict_version.get('@key'),
@@ -89,7 +87,7 @@ def insert_author_table(dict_version, cur):
 
         for i in author:
 
-            cur.execute("""  INSERT INTO authorship (pubkey, authorname)
+            cur.execute("""  INSERT INTO authorship2 (pubkey, authorname)
                              VALUES ('{}', '{}') \
                              ON CONFLICT (pubkey, authorname) DO NOTHING; """.
                         format(dict_version.get('@key'),
@@ -99,39 +97,45 @@ def insert_author_table(dict_version, cur):
 
         author = dict_version.get('author', None)
 
-        cur.execute("""  insert into authorship values \
-                        ('{}', '{}') ON CONFLICT (pubkey, authorname) DO NOTHING; \
-                         """.
+        cur.execute("""  INSERT INTO authorship2 (pubkey, authorname)
+                         VALUES ('{}', '{}') \
+                         ON CONFLICT (pubkey, authorname) DO NOTHING; """.
                     format(dict_version.get('@key'),
                            str(author).replace("'", "").replace(";", "")))
 
     else:
         author = author.items()[1][1]
 
-        cur.execute("""  insert into authorship values \
-                        ('{}', '{}') ON CONFLICT (pubkey, authorname) DO NOTHING; \
-                         """.
+        cur.execute(""" INSERT INTO authorship2 (pubkey, authorname)
+                        VALUES ('{}', '{}') \
+                        ON CONFLICT (pubkey, authorname) DO NOTHING; """.
                     format(dict_version.get('@key'),
                            str(author).replace("'", "").replace(";", "")))
 
 
-def parse_file(xml, tag):
+def parse_file(xml, tags):
     """
     Parsing function for appropriate tags
     Split data between tags into its own element of a list of tags
+
+    for every tag in the list, parse those tags that correspond to it
+    this is only relevant for tags that contain BOTH article and inproceedings
+    tag could be either ["article"] or ["inproceedings"] or ["article","inproceedings"]
+
     """
 
     chunk = []
     beg, end = 0, 0
 
-    for enum, i in enumerate(xml):
+    for tag in tags:
+        for enum, i in enumerate(xml):
 
-        if '<{}'.format(tag) in i:
-            beg = enum
+            if '<{}'.format(tag) in i:
+                beg = enum
 
-        elif '</{}'.format(tag) in i:
-            end = enum + 1
-            chunk.append(",".join(xml[beg:end]))
+            elif '</{}'.format(tag) in i:
+                end = enum + 1
+                chunk.append(",".join(xml[beg:end]))
 
     return chunk
 
@@ -164,6 +168,30 @@ def loop_parsed_file(conn, parsed_file, table):
     return
 
 
+def get_table_and_tag():
+    """
+    Get the table and tag from the user
+    Return the table to upsert, and tag to parse for
+    Table must be either article, inproceedings or authorship
+    """
+
+    table = ""
+
+    while table != 'quit':
+
+        table = raw_input("Please enter table to upsert (must be one of 'article', 'inproceedings', or 'authorship') or 'quit' to exit: ")
+
+        if table == 'article':
+            return ['article'], 'article'
+        elif table == 'inproceedings':
+            return ['inproceedings'], 'inproceedings'
+        elif table == 'authorship':
+            return ['article', 'inproceedings'], 'authorship'
+        else:
+            table = raw_input("Please enter table to upsert (must be one of 'article', 'inproceedings', or 'authorship') or 'quit' to exit: ")
+
+    quit()
+
 if __name__ == "__main__":
 
     # postgres credentials
@@ -171,7 +199,6 @@ if __name__ == "__main__":
     USERNAME = 'ilanman'
     PASSWORD = 'Charlie1234'
     DATABASE = 'dblp'
-    ERROR_COUNT = 0
 
     print "Connecting to Postgres..."
 
@@ -180,13 +207,13 @@ if __name__ == "__main__":
     # "inproceedings" or "article". For author table, need to run twice, once parsing
     # article and once parsing inproceedings. Should come up with better way.
 
-    TAG = 'inproceedings'
-    TABLE = 'authorship'  # article or inproceedings or authorship
-
     print "Read XML file: {}".format(FILENAME)
     XML_FILE = read_xml(FILENAME)
-    print "Parse file for {} tag".format(TAG)
-    PARSED_FILE = parse_file(XML_FILE, TAG)
+
+    TAG_LIST, TABLE = get_table_and_tag()
+    print "Parse file for {} tag".format(",".join(TAG_LIST))
+    PARSED_FILE = parse_file(XML_FILE, TAG_LIST)
+
     print "Loop through parsed file and run upsert query for table: ", TABLE
     loop_parsed_file(CONNECTION, PARSED_FILE, TABLE)
 
