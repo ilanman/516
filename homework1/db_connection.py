@@ -179,14 +179,16 @@ def get_table_and_tag():
 
     while table != 'quit':
 
+        filename = raw_input("Please enter XML file to be uploaded: ")
+
         table = raw_input("Please enter table to upsert (must be one of 'article', 'inproceedings', or 'authorship') or 'quit' to exit: ")
 
         if table == 'article':
-            return ['article'], 'article'
+            return filename, ['article'], 'article'
         elif table == 'inproceedings':
-            return ['inproceedings'], 'inproceedings'
+            return filename, ['inproceedings'], 'inproceedings'
         elif table == 'authorship':
-            return ['article', 'inproceedings'], 'authorship'
+            return filename, ['article', 'inproceedings'], 'authorship'
         else:
             table = raw_input("Please enter table to upsert (must be one of 'article', 'inproceedings', or 'authorship') or 'quit' to exit: ")
 
@@ -194,27 +196,24 @@ def get_table_and_tag():
 
 if __name__ == "__main__":
 
-    # postgres credentials
     HOSTNAME = 'localhost'
-    USERNAME = 'ilanman'
-    PASSWORD = 'Charlie1234'
+    USERNAME = 'dblpuser'
+    PASSWORD = ''
     DATABASE = 'dblp'
 
     print "Connecting to Postgres..."
 
     CONNECTION = psycopg2.connect(host=HOSTNAME, user=USERNAME, password=PASSWORD, dbname=DATABASE)
-    FILENAME = 'dblp-2015-12-01_parsed.xml'
-    # "inproceedings" or "article". For author table, need to run twice, once parsing
-    # article and once parsing inproceedings. Should come up with better way.
 
-    print "Read XML file: {}".format(FILENAME)
+    FILENAME, TAG_LIST, TABLE = get_table_and_tag()
+
+    print "Reading XML file: {} ...".format(FILENAME)
     XML_FILE = read_xml(FILENAME)
 
-    TAG_LIST, TABLE = get_table_and_tag()
-    print "Parse file for {} tag".format(",".join(TAG_LIST))
+    print "Parsing XML file for {} tag ...".format(",".join(TAG_LIST))
     PARSED_FILE = parse_file(XML_FILE, TAG_LIST)
 
-    print "Loop through parsed file and run upsert query for table: ", TABLE
+    print "Looping through parsed file and upserting records into {} table".format(TABLE)
     loop_parsed_file(CONNECTION, PARSED_FILE, TABLE)
 
     CONNECTION.close()
